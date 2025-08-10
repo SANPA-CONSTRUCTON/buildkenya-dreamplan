@@ -10,6 +10,8 @@ import { useHousePlans } from "@/hooks/useHousePlans";
 import { useAIEnhancement } from "@/hooks/useAIEnhancement";
 import { RefreshCw, ArrowRight, Home, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const Results = () => {
   const [plan, setPlan] = useState<HousePlan | null>(null);
@@ -17,6 +19,34 @@ const Results = () => {
   const navigate = useNavigate();
   const { savePlan, loading: saveLoading } = useHousePlans();
   const { enhancePlanWithAI, isLoading: aiLoading, error: aiError } = useAIEnhancement();
+
+  // Optional add-ons (user-selectable upgrades)
+  const addonOptions = [
+    { id: 'solar', label: 'Solar Power Package', desc: '3–5kW system with inverter & batteries', type: 'percent', value: 0.06 },
+    { id: 'water', label: '5,000L Water Tank & Plumbing', desc: 'Storage tank with guttering & pump', type: 'fixed', value: 120_000 },
+    { id: 'fence', label: 'Perimeter Fence & Gate', desc: 'Chain-link/masonry mix with steel gate', type: 'fixed', value: 180_000 },
+    { id: 'garage', label: 'Single Car Garage', desc: 'Attached or detached standard garage', type: 'percent', value: 0.04 },
+    { id: 'backup', label: 'Backup Generator', desc: '3–5kVA standby generator', type: 'percent', value: 0.02 },
+    { id: 'finishes', label: 'Premium Interior Finishes', desc: 'Upgraded floors, cabinetry, fixtures', type: 'percent', value: 0.05 },
+  ] as const;
+
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+
+  const toggleAddon = (id: string, checked: boolean) => {
+    setSelectedAddons((prev) => {
+      if (checked) return Array.from(new Set([...prev, id]));
+      return prev.filter((x) => x !== id);
+    });
+  };
+
+  const addonCost = (id: string) => {
+    const opt = addonOptions.find((o) => o.id === id);
+    if (!opt) return 0;
+    if (opt.type === 'fixed') return opt.value;
+    return Math.round(plan ? plan.budget * opt.value : 0);
+  };
+
+  const additionalCost = selectedAddons.reduce((sum, id) => sum + addonCost(id), 0);
 
   useEffect(() => {
     const storedPlan = localStorage.getItem("currentPlan");
@@ -90,6 +120,7 @@ const Results = () => {
   }
 
   const totalCost = Object.values(plan.costBreakdown).reduce((sum, cost) => sum + cost, 0);
+  const fallbackReason = (plan as any)?._fallbackReason as string | undefined;
 
   return (
     <AppLayout 
@@ -141,15 +172,25 @@ const Results = () => {
           </div>
         </div>
 
+        {fallbackReason && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTitle>AI service unavailable — using template</AlertTitle>
+            <AlertDescription>
+              {fallbackReason}
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Cost Breakdown</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Total Budget: KES {plan.budget.toLocaleString()} | 
-                  Total Cost: KES {totalCost.toLocaleString()} | 
-                  Remaining: KES {(plan.budget - totalCost).toLocaleString()}
+                  Total Budget: KES {plan.budget.toLocaleString()} | {" "}
+                  Base Cost: KES {totalCost.toLocaleString()} | {" "}
+                  Add-ons: KES {additionalCost.toLocaleString()} | {" "}
+                  Grand Total: KES {(totalCost + additionalCost).toLocaleString()} | {" "}
+                  Remaining vs Budget: KES {(plan.budget - (totalCost + additionalCost)).toLocaleString()}
                 </p>
               </CardHeader>
               <CardContent>
@@ -237,6 +278,41 @@ const Results = () => {
                       {note}
                     </p>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Optional Add-ons</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  {addonOptions.map((opt) => {
+                    const checked = selectedAddons.includes(opt.id);
+                    const cost = addonCost(opt.id);
+                    return (
+                      <label key={opt.id} className="flex items-start gap-3">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => toggleAddon(opt.id, Boolean(v))}
+                          aria-label={opt.label}
+                        />
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{opt.label}</span>
+                            <span className="text-sm text-muted-foreground">KES {cost.toLocaleString()}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium">Estimated Add-ons Total</span>
+                  <span className="font-semibold">KES {additionalCost.toLocaleString()}</span>
                 </div>
               </CardContent>
             </Card>
