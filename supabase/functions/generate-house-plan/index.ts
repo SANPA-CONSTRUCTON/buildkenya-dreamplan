@@ -80,8 +80,9 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
     });
 
     if (!response.ok) {
-      console.error(`OpenRouter API error: ${response.status}`);
-      throw new Error(`OpenRouter API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
