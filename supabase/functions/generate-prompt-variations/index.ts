@@ -1,13 +1,12 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { HfInference } from 'https://esm.sh/@huggingface/inference@2.3.2'
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
 const googleApiKey = Deno.env.get('GOOGLE_API_KEY');
 
 serve(async (req) => {
@@ -16,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const token = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
+    // Using Google AI Studio only
 
     const { houseType, style, roofing, interiorFinish, bedrooms, size, plotSize, location = 'Kenya' } = await req.json();
 
@@ -58,69 +57,7 @@ serve(async (req) => {
       }
     }
 
-    // 2) Try OpenRouter next (secondary provider)
-    if (openRouterApiKey) {
-      try {
-        const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openRouterApiKey}`,
-            'Content-Type': 'application/json',
-            'X-Title': 'Prompt Variations Generator'
-          },
-          body: JSON.stringify({
-            model: 'anthropic/claude-3.5-sonnet',
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user', content: user }
-            ],
-            temperature: 0.6,
-            max_tokens: 800
-          })
-        });
 
-        if (orRes.ok) {
-          const data = await orRes.json();
-          const content = data.choices?.[0]?.message?.content || '';
-          const match = content.match(/\[[\s\S]*\]/s);
-          const prompts: string[] = match ? JSON.parse(match[0]) : [];
-          if (Array.isArray(prompts) && prompts.length) {
-            return new Response(JSON.stringify({ success: true, prompts: prompts.slice(0, 3), meta: { source: 'openrouter' } }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          console.error('OpenRouter returned non-array response:', content);
-        } else {
-          const errText = await orRes.text();
-          console.error(`OpenRouter error: ${orRes.status} - ${errText}`);
-        }
-      } catch (e) {
-        console.error('OpenRouter call failed:', e);
-      }
-    }
-
-    // 2) Fallback to Hugging Face LLM if available
-    if (token) {
-      try {
-        const hf = new HfInference(token);
-        const res: any = await hf.textGeneration({
-          model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
-          inputs: `${system}\n\n${user}`,
-          parameters: { max_new_tokens: 600, temperature: 0.7 }
-        });
-        const txt = res?.generated_text || '';
-        const match = txt.match(/\[[\s\S]*\]/s);
-        const prompts: string[] = match ? JSON.parse(match[0]) : [];
-        if (Array.isArray(prompts) && prompts.length) {
-          return new Response(JSON.stringify({ success: true, prompts: prompts.slice(0, 3), meta: { source: 'huggingface' } }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        console.error('HF returned non-array response:', txt);
-      } catch (e) {
-        console.error('Hugging Face call failed:', e);
-      }
-    }
 
     // 3) Final static prompts fallback
     const fallback = [

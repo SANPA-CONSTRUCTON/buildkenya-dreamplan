@@ -1,9 +1,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { HfInference } from 'https://esm.sh/@huggingface/inference@2.3.2'
 
-const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
-const hfToken = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
+const googleApiKey = Deno.env.get('GOOGLE_API_KEY');
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -88,36 +87,6 @@ serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Prefer OpenRouter if available; otherwise fall back to Hugging Face LLM
-    if (!openRouterApiKey) {
-      if (hfToken) {
-        try {
-          const hf = new HfInference(hfToken);
-          const hfRes: any = await hf.textGeneration({
-            model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
-            inputs: prompt,
-            parameters: { max_new_tokens: 1200, temperature: 0.6 }
-          });
-          const aiContent = hfRes?.generated_text || '';
-          const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/s) || aiContent.match(/\{[\s\S]*\}/s);
-          const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent;
-          const planData = JSON.parse(jsonString);
-          planData.id = `ai-plan-${budget}-${Date.now()}`;
-          planData.budget = budget;
-          return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'huggingface' } }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } catch (e) {
-          console.error('Hugging Face generation failed:', e);
-        }
-      }
-      const plan = buildFallbackPlan(budget, location, preferences);
-      plan._fallbackReason = 'Missing OPENROUTER_API_KEY and HF fallback failed or missing token';
-      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     console.log(`Generating house plan for budget: KES ${budget}`);
 
     const prompt = `You are an expert Kenyan architect and construction consultant. Generate a comprehensive house plan for a budget of KES ${budget.toLocaleString()} in ${location}.
@@ -159,84 +128,48 @@ Respond with a JSON object containing:
 
 Ensure all costs add up to approximately the given budget. Make recommendations practical and achievable in Kenya.`;
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    if (!googleApiKey) {
+      const plan = buildFallbackPlan(budget, location, preferences);
+      plan._fallbackReason = 'Missing GOOGLE_API_KEY';
+      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`;
+    const gr = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'Content-Type': 'application/json',
-        // Only X-Title is required; omit HTTP-Referer to avoid domain validation issues
-        'X-Title': 'House Plan Generator',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'anthropic/claude-3.5-sonnet',
-        messages: [
-          { role: 'system', content: 'You are an expert Kenyan architect who generates realistic, buildable house plans with accurate cost breakdowns based on current Kenyan construction costs.' },
-          { role: 'user', content: prompt }
+        contents: [
+          { role: 'user', parts: [{ text: prompt }] }
         ],
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4000 }
+      })
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`OpenRouter API error: ${response.status} - ${errorText}`);
-      // Try Hugging Face LLM as secondary provider when OpenRouter fails (e.g., 402 insufficient credits)
-      if (hfToken) {
-        try {
-          const hf = new HfInference(hfToken);
-          const hfRes: any = await hf.textGeneration({
-            model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
-            inputs: prompt,
-            parameters: { max_new_tokens: 1200, temperature: 0.6 }
-          });
-          const aiContentHF = hfRes?.generated_text || '';
-          const jsonMatchHF = aiContentHF.match(/```json\n([\s\S]*?)\n```/s) || aiContentHF.match(/\{[\s\S]*\}/s);
-          const jsonStringHF = jsonMatchHF ? (jsonMatchHF[1] || jsonMatchHF[0]) : aiContentHF;
-          const planDataHF = JSON.parse(jsonStringHF);
-          planDataHF.id = `ai-plan-${budget}-${Date.now()}`;
-          planDataHF.budget = budget;
-          return new Response(JSON.stringify({ success: true, plan: planDataHF, meta: { source: 'huggingface', reason: `OpenRouter failed: ${response.status}` } }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } catch (hfErr) {
-          console.error('Hugging Face fallback failed:', hfErr);
-        }
-      }
+    if (!gr.ok) {
+      const errText = await gr.text();
+      console.error(`Google API error: ${gr.status} - ${errText}`);
       const plan = buildFallbackPlan(budget, location, preferences);
-      plan._fallbackReason = `OpenRouter API error: ${response.status} - ${errorText}`;
+      plan._fallbackReason = `Google API error: ${gr.status}`;
       return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const data = await response.json();
-    const aiContent = data.choices?.[0]?.message?.content;
+    const gdata = await gr.json();
+    const aiText = gdata?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || gdata?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    if (!aiContent || typeof aiContent !== 'string') {
-      console.error('Invalid AI response structure');
-      const plan = buildFallbackPlan(budget, location, preferences);
-      plan._fallbackReason = 'Invalid AI response structure';
-      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('AI Response received:', aiContent.substring(0, 200) + '...');
-
-    // Try to parse JSON, fallback to structured response if needed
     let planData: any;
     try {
-      // Extract JSON from response if wrapped in markdown
-      const jsonMatch = aiContent.match(/```json\n(.*?)\n```/s) || aiContent.match(/\{[\s\S]*\}/s);
-      const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent;
+      const jsonMatch = aiText.match(/```json\n([\s\S]*?)\n```/s) || aiText.match(/\{[\s\S]*\}/s);
+      const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiText;
       planData = JSON.parse(jsonString);
-
-      // Ensure we have an ID and budget fields
       planData.id = `ai-plan-${budget}-${Date.now()}`;
       planData.budget = budget;
 
-      return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'openrouter' } }), {
+      return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'google' } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } catch (parseError) {
@@ -247,6 +180,7 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
   } catch (error: any) {
     console.error('Error in generate-house-plan function:', error);
     // As a last resort, provide a fallback so the user still gets a plan and we surface the reason

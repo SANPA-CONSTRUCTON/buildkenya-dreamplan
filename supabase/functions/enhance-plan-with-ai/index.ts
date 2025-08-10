@@ -1,7 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+const googleApiKey = Deno.env.get('GOOGLE_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,35 +39,35 @@ Respond in JSON format with these fields:
   "aiPrompts": ["prompt1", "prompt2", "prompt3"]
 }`;
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    if (!googleApiKey) {
+      return new Response(JSON.stringify({ success: false, error: 'Missing GOOGLE_API_KEY' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`;
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://your-site.com',
-        'X-Title': 'House Plan Generator'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-sonnet-4-20250514',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are an expert architect and construction consultant specializing in affordable housing solutions in Kenya. Provide practical, detailed advice.' 
-          },
-          { role: 'user', content: prompt }
+        contents: [
+          { role: 'user', parts: [{ text: prompt }] }
         ],
-        temperature: 0.7,
-        max_tokens: 2000
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2000 }
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.status}`);
+      const errText = await response.text();
+      throw new Error(`Google API error: ${response.status} - ${errText}`);
     }
 
-    const data = await response.json();
-    const aiContent = data.choices[0].message.content;
-    
+    const gdata = await response.json();
+    const aiContent = gdata?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || gdata?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
     // Try to parse JSON, fallback to structured text if needed
     let enhancedData;
     try {
