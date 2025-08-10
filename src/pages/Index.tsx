@@ -5,13 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AppLayout from "@/components/AppLayout";
-import { generateHousePlan } from "@/lib/planGenerator";
+import { useAIPlanGeneration } from "@/hooks/useAIPlanGeneration";
 import { toast } from "sonner";
 
 const Index = () => {
   const [budget, setBudget] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
   const navigate = useNavigate();
+  const { generateAIPlan, isLoading, error } = useAIPlanGeneration();
 
   const exampleBudgets = [
     { amount: 500000, label: "Starter Home" },
@@ -28,23 +28,23 @@ const Index = () => {
       return;
     }
 
-    setIsGenerating(true);
-    
     try {
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      toast.info("Generating your AI-powered house plan...");
       
-      const plan = generateHousePlan(budgetAmount);
+      const plan = await generateAIPlan(budgetAmount, "Kenya", "");
       
-      // Store plan in localStorage for sharing between pages
-      localStorage.setItem("currentPlan", JSON.stringify(plan));
-      
-      toast.success("Your house plan is ready!");
-      navigate("/results");
+      if (plan) {
+        // Store plan in localStorage for sharing between pages
+        localStorage.setItem("currentPlan", JSON.stringify(plan));
+        
+        toast.success("Your AI-generated house plan is ready!");
+        navigate("/results");
+      } else {
+        toast.error("Failed to generate plan. Please try again.");
+      }
     } catch (error) {
+      console.error('Plan generation error:', error);
       toast.error("Failed to generate plan. Please try again.");
-    } finally {
-      setIsGenerating(false);
     }
   };
 
@@ -62,18 +62,18 @@ const Index = () => {
         <div className="container mx-auto px-4 py-16">
           <div className="text-center mb-12">
             <h1 className="text-5xl font-bold mb-6 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Plan Your Dream Home in Kenya
+              AI-Powered House Plans for Kenya
             </h1>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Enter your budget (minimum KES 500,000) and we'll design a home plan for you – 
-              including costs, requirements, and a ready-to-use AI visual prompt.
+              Enter your budget (minimum KES 500,000) and our AI will design a personalized house plan – 
+              including realistic costs, materials, and architectural recommendations tailored for Kenya.
             </p>
           </div>
 
           <div className="max-w-2xl mx-auto">
             <Card className="shadow-card border-0 bg-gradient-card">
               <CardHeader>
-                <CardTitle className="text-2xl text-center">Build Your Dream</CardTitle>
+                <CardTitle className="text-2xl text-center">Build Your AI-Designed Dream</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
@@ -92,10 +92,10 @@ const Index = () => {
                   variant="hero" 
                   size="lg" 
                   onClick={handleGenerate}
-                  disabled={isGenerating}
+                  disabled={isLoading}
                   className="w-full h-14 text-lg"
                 >
-                  {isGenerating ? "Generating Your Plan..." : "🏠 Generate My Plan"}
+                  {isLoading ? "🤖 AI Generating Your Plan..." : "🏠 Generate My AI Plan"}
                 </Button>
 
                 <div className="pt-6">

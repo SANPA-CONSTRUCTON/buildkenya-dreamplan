@@ -48,7 +48,7 @@ Respond in JSON format with these fields:
         'X-Title': 'House Plan Generator'
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-3.5-sonnet',
+        model: 'anthropic/claude-sonnet-4-20250514',
         messages: [
           { 
             role: 'system', 
