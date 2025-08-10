@@ -123,19 +123,45 @@ serve(async (req) => {
 
     console.log(`Generating house plan for budget: KES ${budget}`);
 
-    const prompt = `You are an expert Kenyan architect and construction consultant. Generate a comprehensive house plan for a budget of KES ${budget.toLocaleString()} in ${location}.
+    // Regional price indices to guide AI and validation
+    const countryIndexMap: Record<string, number> = {
+      'Kenya': 1.0,
+      'Uganda': 0.9,
+      'Tanzania': 0.95,
+      'Rwanda': 1.05,
+      'Ethiopia': 0.85,
+      'Nigeria': 0.8,
+      'Ghana': 0.85,
+    };
+    const countyIndexMap: Record<string, number> = {
+      'Nairobi': 1.25,
+      'Mombasa': 1.15,
+      'Kiambu': 1.10,
+      'Nakuru': 1.00,
+      'Kisumu': 1.00,
+      'Uasin Gishu': 0.95,
+      'Machakos': 0.95,
+      'Kajiado': 0.95,
+      'Kilifi': 0.95,
+      'Nyeri': 0.9,
+    };
+    const country = Object.keys(countryIndexMap).find(c => location?.toLowerCase().includes(c.toLowerCase())) || 'Kenya';
+    const county = Object.keys(countyIndexMap).find(c => location?.toLowerCase().includes(c.toLowerCase()));
+    const priceIndex = (countryIndexMap[country] || 1.0) * (county ? (countyIndexMap[county] || 1.0) : 1.0);
+
+    const prompt = `You are an expert architect and construction cost consultant for East Africa. Generate a comprehensive house plan for a budget of KES ${budget.toLocaleString()} in ${location}.
 
 Additional preferences: ${preferences}
 
-Consider Kenyan building costs, materials, labor rates, permits, and regulations. Provide realistic and buildable recommendations.
+Use realistic 2024–2025 unit rates and local materials. Apply a regional price index factor of ${priceIndex.toFixed(2)} (country: ${country}${county ? `, county: ${county}` : ''}) when estimating costs. Ensure that the costBreakdown values sum EXACTLY to KES ${budget.toLocaleString()} after rounding to whole shillings.
 
 Respond with a JSON object containing:
 {
   "houseType": "descriptive house type (e.g., 3-Bedroom Modern Family House)",
   "style": "architectural style",
   "bedrooms": number,
-  "size": number (square meters),
-  "plotSize": number (square meters for the plot),
+  "size": number,  // square meters
+  "plotSize": number,  // square meters for the plot
   "roofing": "roofing material type",
   "interiorFinish": "interior finish type",
   "costBreakdown": {
@@ -152,15 +178,15 @@ Respond with a JSON object containing:
     "furniture": number,
     "landscaping": number
   },
-  "timeline": "construction timeline (e.g., 6-8 months)",
+  "timeline": "construction timeline (e.g., 6–8 months)",
   "notes": ["practical tip 1", "practical tip 2", "practical tip 3"],
   "aiPrompts": ["detailed AI image prompt 1", "detailed AI image prompt 2", "detailed AI image prompt 3"],
   "recommendations": "architectural recommendations specific to this budget",
   "costOptimization": "specific cost-saving suggestions",
-  "materials": "recommended materials for Kenyan climate"
+  "materials": "recommended materials for local climate"
 }
+`;
 
-Ensure all costs add up to approximately the given budget. Make recommendations practical and achievable in Kenya.`;
 
     if (!googleApiKey) {
       const plan = buildFallbackPlan(budget, location, preferences);
@@ -204,6 +230,47 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
       planData.budget = budget;
       planData.location = location;
 
+      // Normalize costBreakdown to sum exactly to budget
+      const categories = [
+        'land','foundation','walls','roofing','windows','interior','plumbing','electrical','labour','permits','furniture','landscaping'
+      ];
+      if (!planData.costBreakdown || typeof planData.costBreakdown !== 'object') {
+        planData.costBreakdown = {};
+        for (const k of categories) planData.costBreakdown[k] = 0;
+      }
+      let total = 0;
+      const numeric: Record<string, number> = {};
+      for (const k of categories) {
+        const v = Number(planData.costBreakdown[k] ?? 0);
+        numeric[k] = isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+        total += numeric[k];
+      }
+      if (total <= 0) {
+        // Fallback even when AI returned invalid totals: simple weights
+        const weights: Record<string, number> = {
+          land: 0.2, foundation: 0.1, walls: 0.18, roofing: 0.12, windows: 0.05, interior: 0.1,
+          plumbing: 0.06, electrical: 0.06, labour: 0.08, permits: 0.02, furniture: 0.02, landscaping: 0.01
+        };
+        let allocated = 0;
+        for (const k of categories) {
+          const amt = Math.floor(budget * (weights[k] ?? 0));
+          numeric[k] = amt; allocated += amt;
+        }
+        numeric['landscaping'] += Math.max(0, budget - allocated);
+      } else if (total !== budget) {
+        const scale = budget / total;
+        let allocated = 0;
+        for (let i = 0; i < categories.length; i++) {
+          const k = categories[i];
+          if (i < categories.length - 1) {
+            numeric[k] = Math.floor(numeric[k] * scale);
+            allocated += numeric[k];
+          } else {
+            numeric[k] = Math.max(0, budget - allocated);
+          }
+        }
+      }
+      planData.costBreakdown = numeric;
 
       return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'google' } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
