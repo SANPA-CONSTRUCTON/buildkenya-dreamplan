@@ -66,7 +66,7 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
         'X-Title': 'House Plan Generator'
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: 'anthropic/claude-3.5-sonnet',
         messages: [
           { 
             role: 'system', 
