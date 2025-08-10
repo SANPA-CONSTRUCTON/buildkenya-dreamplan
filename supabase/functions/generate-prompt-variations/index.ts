@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+const googleApiKey = Deno.env.get('GOOGLE_API_KEY');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,7 +23,42 @@ serve(async (req) => {
     const system = 'You are a Kenyan architectural visual prompt expert. Generate succinct, high-quality prompts for image models. Output JSON array of 3 strings only.';
     const user = `Create 3 diverse visual prompts for a ${bedrooms}-bedroom ${style} house (type: ${houseType}) in ${location}. Roofing: ${roofing}. Interior: ${interiorFinish}. Size: ${size}m² on ${plotSize}m² plot. Focus on realistic materials, lighting, and camera angles. Return only a JSON array of strings.`
 
-    // 1) Try OpenRouter first (primary provider)
+    // 1) Try Google AI Studio (Gemini) first
+    if (googleApiKey) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${googleApiKey}`;
+        const gr = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              { role: 'user', parts: [{ text: `${system}\n\n${user}\n\nReturn only a JSON array of 3 strings.` }] }
+            ],
+            generationConfig: { temperature: 0.6, maxOutputTokens: 800 }
+          })
+        });
+
+        if (gr.ok) {
+          const gdata = await gr.json();
+          const text = gdata?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || gdata?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const matchG = text?.match(/\[[\s\S]*\]/s);
+          const promptsG: string[] = matchG ? JSON.parse(matchG[0]) : [];
+          if (Array.isArray(promptsG) && promptsG.length) {
+            return new Response(JSON.stringify({ success: true, prompts: promptsG.slice(0, 3), meta: { source: 'google' } }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.error('Google returned non-array response:', text);
+        } else {
+          const errText = await gr.text();
+          console.error(`Google error: ${gr.status} - ${errText}`);
+        }
+      } catch (e) {
+        console.error('Google call failed:', e);
+      }
+    }
+
+    // 2) Try OpenRouter next (secondary provider)
     if (openRouterApiKey) {
       try {
         const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
