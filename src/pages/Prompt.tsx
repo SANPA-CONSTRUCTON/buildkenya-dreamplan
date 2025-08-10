@@ -14,6 +14,8 @@ const Prompt = () => {
   const [plan, setPlan] = useState<HousePlan | null>(null);
   const [generating, setGenerating] = useState(false);
   const { generatePromptVariations, isLoading, error } = useAIPromptVariations();
+  const [autoTriggered, setAutoTriggered] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,6 +26,26 @@ const Prompt = () => {
       navigate("/");
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (plan && !autoTriggered) {
+        setAutoTriggered(true);
+        const res = await generatePromptVariations(plan);
+        if (res?.prompts) {
+          const updated = { ...plan, aiPrompts: res.prompts } as HousePlan;
+          localStorage.setItem('currentPlan', JSON.stringify(updated));
+          setPlan(updated);
+          const src = res.meta?.source || 'google';
+          toast.info(`Using ${src} for prompts`);
+        } else if (error) {
+          toast.error(error);
+        }
+      }
+    };
+    run();
+  }, [plan, autoTriggered, generatePromptVariations, error]);
+
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -53,7 +75,7 @@ const Prompt = () => {
   return (
     <AppLayout 
       title="AI Visual Prompts"
-      description={`Ready-to-use AI prompts for generating visuals of your ${plan.houseType} design.`}
+      description={`AI prompts for visuals of your ${plan.houseType}${plan.location ? ` in ${plan.location}` : ''}.`}
     >
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-4 mb-8">
@@ -77,12 +99,9 @@ const Prompt = () => {
                 const updated = { ...plan, aiPrompts: res.prompts };
                 localStorage.setItem('currentPlan', JSON.stringify(updated));
                 setPlan(updated);
-                const src = res.meta?.source || 'unknown';
-                if (src !== 'openrouter') {
-                  toast.info(`Using ${src} for prompts`);
-                } else {
-                  toast.success('OpenRouter AI used for prompt variations');
-                }
+                const src = res.meta?.source || 'google';
+                toast.info(`Using ${src} for prompts`);
+
               } else if (error) {
                 toast.error(error);
               } else {

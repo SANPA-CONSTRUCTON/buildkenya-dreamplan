@@ -147,7 +147,7 @@ const Results = () => {
   return (
     <AppLayout 
       title={`${plan.houseType} - Budget KES ${plan.budget.toLocaleString()}`}
-      description={`Detailed cost breakdown for a ${plan.houseType} in ${plan.style} style with ${plan.bedrooms} bedrooms.`}
+      description={`Detailed cost breakdown for a ${plan.houseType} in ${plan.style} style with ${plan.bedrooms} bedrooms${plan.location ? ` in ${plan.location}` : ''}.`}
     >
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-start mb-8">
@@ -158,6 +158,7 @@ const Results = () => {
               <Badge variant="secondary">{plan.bedrooms} Bedrooms</Badge>
               <Badge variant="secondary">{plan.size}m² House</Badge>
               <Badge variant="secondary">{plan.plotSize}m² Plot</Badge>
+              {plan.location && <Badge variant="secondary">{plan.location}</Badge>}
             </div>
           </div>
           <div className="flex gap-2">

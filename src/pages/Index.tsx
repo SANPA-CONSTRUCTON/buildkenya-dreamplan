@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AppLayout from "@/components/AppLayout";
 import { useAIPlanGeneration } from "@/hooks/useAIPlanGeneration";
 import { toast } from "sonner";
 
 const Index = () => {
   const [budget, setBudget] = useState("");
+  const [country, setCountry] = useState("Kenya");
+  const [county, setCounty] = useState("");
   const navigate = useNavigate();
   const { generateAIPlan, isLoading, error } = useAIPlanGeneration();
 
@@ -20,9 +23,15 @@ const Index = () => {
     { amount: 10000000, label: "Luxury Estate" }
   ];
 
+  const kenyaCounties = useMemo(() => [
+    "Nairobi", "Mombasa", "Kiambu", "Nakuru", "Kisumu", "Uasin Gishu", "Machakos", "Kajiado", "Kilifi", "Nyeri"
+  ], []);
+
+  const countries = ["Kenya", "Uganda", "Tanzania", "Rwanda", "Ethiopia"];
+
   const handleGenerate = async () => {
     const budgetAmount = parseInt(budget.replace(/,/g, ""));
-    
+
     if (!budgetAmount || budgetAmount < 500000) {
       toast.error("Please enter a budget of at least KES 500,000");
       return;
@@ -30,18 +39,20 @@ const Index = () => {
 
     try {
       toast.info("Generating your AI-powered house plan...");
-      
-      const plan = await generateAIPlan(budgetAmount, "Kenya", "");
-      
+
+      const location = country === 'Kenya' && county ? `${county}, ${country}` : country;
+      const plan = await generateAIPlan(budgetAmount, location, "");
+
       if (plan) {
         // Store plan in localStorage for sharing between pages
-        localStorage.setItem("currentPlan", JSON.stringify(plan));
+        const withLocation = { ...plan, location } as any;
+        localStorage.setItem("currentPlan", JSON.stringify(withLocation));
 
-        const fallbackReason = (plan as any)?._fallbackReason;
+        const fallbackReason = (withLocation as any)?._fallbackReason;
         if (fallbackReason) {
           toast.info(`AI unavailable — using template: ${fallbackReason}`);
         }
-        
+
         toast.success("Your AI-generated house plan is ready!");
         navigate("/results");
       } else {
@@ -91,6 +102,37 @@ const Index = () => {
                     onChange={(e) => setBudget(formatBudget(e.target.value))}
                     className="text-lg h-12"
                   />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-lg">Country</Label>
+                    <Select value={country} onValueChange={(v) => { setCountry(v); setCounty(""); }}>
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select country" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {countries.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {country === 'Kenya' && (
+                    <div className="space-y-2">
+                      <Label className="text-lg">County (Kenya)</Label>
+                      <Select value={county} onValueChange={setCounty}>
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Select county" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {kenyaCounties.map((k) => (
+                            <SelectItem key={k} value={k}>{k}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
                 <Button 

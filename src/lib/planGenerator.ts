@@ -36,6 +36,7 @@ export interface HousePlan {
   notes: string[];
   aiPrompts: string[];
   aiEnhanced?: AIEnhancedData;
+  location?: string;
 }
 
 const ARCHITECTURAL_STYLES = [

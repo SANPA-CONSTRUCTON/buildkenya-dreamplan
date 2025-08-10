@@ -19,7 +19,7 @@ export const useAIPromptVariations = () => {
           bedrooms: plan.bedrooms,
           size: plan.size,
           plotSize: plan.plotSize,
-          location: 'Kenya'
+          location: plan.location || 'Kenya'
         }
       });
       if (fnError) throw fnError;

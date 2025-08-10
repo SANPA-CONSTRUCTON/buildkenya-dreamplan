@@ -16,8 +16,41 @@ serve(async (req) => {
 
   // Helper to distribute budget deterministically and sum exactly to budget
   const buildFallbackPlan = (budget: number, location: string, preferences: string) => {
-    const bedrooms = budget < 1_000_000 ? 2 : budget < 3_000_000 ? 3 : budget < 8_000_000 ? 4 : 5;
-    const size = budget < 1_000_000 ? 50 : budget < 3_000_000 ? 100 : budget < 8_000_000 ? 150 : 250;
+    // Location price index (relative to Kenya = 1.0)
+    const countryIndexMap: Record<string, number> = {
+      'Kenya': 1.0,
+      'Uganda': 0.9,
+      'Tanzania': 0.95,
+      'Rwanda': 1.05,
+      'Ethiopia': 0.85,
+      'Nigeria': 0.8,
+      'Ghana': 0.85,
+    };
+
+    // Kenyan county adjustments (if location includes a county name)
+    const countyIndexMap: Record<string, number> = {
+      'Nairobi': 1.25,
+      'Mombasa': 1.15,
+      'Kiambu': 1.10,
+      'Nakuru': 1.00,
+      'Kisumu': 1.00,
+      'Uasin Gishu': 0.95,
+      'Machakos': 0.95,
+      'Kajiado': 0.95,
+      'Kilifi': 0.95,
+      'Nyeri': 0.9,
+    };
+
+    const country = Object.keys(countryIndexMap).find(c => location?.toLowerCase().includes(c.toLowerCase())) || 'Kenya';
+    const county = Object.keys(countyIndexMap).find(c => location?.toLowerCase().includes(c.toLowerCase()));
+
+    const priceIndex = (countryIndexMap[country] || 1.0) * (county ? (countyIndexMap[county] || 1.0) : 1.0);
+
+    // Use effective budget to scale house size/bedrooms for costlier locations
+    const effectiveBudget = Math.max(1, Math.floor(budget / priceIndex));
+
+    const bedrooms = effectiveBudget < 1_000_000 ? 2 : effectiveBudget < 3_000_000 ? 3 : effectiveBudget < 8_000_000 ? 4 : 5;
+    const size = effectiveBudget < 1_000_000 ? 50 : effectiveBudget < 3_000_000 ? 100 : effectiveBudget < 8_000_000 ? 150 : 250;
 
     // Weights must sum to 1.0
     const weights: Record<string, number> = {
@@ -67,12 +100,13 @@ serve(async (req) => {
       ],
       aiPrompts: [
         `Modern ${bedrooms}-bedroom house in ${location}, realistic architecture, natural lighting`,
-        `Exterior view of affordable Kenyan home, practical layout, durable materials`,
-        `Interior of comfortable Kenyan house with natural materials, bright daylight`,
+        `Exterior view of affordable home in ${location}, practical layout, durable materials`,
+        `Interior of comfortable house with natural materials, bright daylight`
       ],
-      recommendations: "Template-based recommendations tailored from your budget.",
+      recommendations: "Template-based recommendations tailored from your budget and location.",
       costOptimization: "Use local materials, optimize spans to reduce steel, standardize window/door sizes.",
       materials: "Stabilized soil blocks or concrete blocks, mabati roofing, UPVC windows, ceramic tiles",
+      location,
       _fallbackReason: '',
     };
   };
@@ -168,6 +202,8 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
       planData = JSON.parse(jsonString);
       planData.id = `ai-plan-${budget}-${Date.now()}`;
       planData.budget = budget;
+      planData.location = location;
+
 
       return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'google' } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
