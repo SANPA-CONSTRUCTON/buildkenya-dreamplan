@@ -36,6 +36,11 @@ const Index = () => {
       if (plan) {
         // Store plan in localStorage for sharing between pages
         localStorage.setItem("currentPlan", JSON.stringify(plan));
+
+        const fallbackReason = (plan as any)?._fallbackReason;
+        if (fallbackReason) {
+          toast.info(`AI unavailable — using template: ${fallbackReason}`);
+        }
         
         toast.success("Your AI-generated house plan is ready!");
         navigate("/results");

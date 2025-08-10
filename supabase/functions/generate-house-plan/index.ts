@@ -13,9 +13,88 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Helper to distribute budget deterministically and sum exactly to budget
+  const buildFallbackPlan = (budget: number, location: string, preferences: string) => {
+    const bedrooms = budget < 1_000_000 ? 2 : budget < 3_000_000 ? 3 : budget < 8_000_000 ? 4 : 5;
+    const size = budget < 1_000_000 ? 50 : budget < 3_000_000 ? 100 : budget < 8_000_000 ? 150 : 250;
+
+    // Weights must sum to 1.0
+    const weights: Record<string, number> = {
+      land: 0.20,
+      foundation: 0.10,
+      walls: 0.18,
+      roofing: 0.12,
+      windows: 0.05,
+      interior: 0.10,
+      plumbing: 0.06,
+      electrical: 0.06,
+      labour: 0.08,
+      permits: 0.02,
+      furniture: 0.02,
+      landscaping: 0.01,
+    };
+
+    // First pass rounding
+    const categories = Object.keys(weights);
+    const breakdown: Record<string, number> = {};
+    let allocated = 0;
+    for (const key of categories) {
+      const amount = Math.floor(budget * weights[key]);
+      breakdown[key] = amount;
+      allocated += amount;
+    }
+    // Adjust the last category to hit exact budget
+    const lastKey = categories[categories.length - 1];
+    breakdown[lastKey] += Math.max(0, budget - allocated);
+
+    return {
+      id: `ai-plan-${budget}-${Date.now()}`,
+      budget,
+      houseType: `${bedrooms}-Bedroom AI-Generated House`,
+      style: "Modern Kenyan",
+      bedrooms,
+      size,
+      plotSize: size * 4,
+      roofing: "Mabati (iron sheets)",
+      interiorFinish: "Ceramic tiles",
+      costBreakdown: breakdown,
+      timeline: `${Math.max(4, Math.ceil(size / 25))} months`,
+      notes: [
+        "AI template used due to upstream error",
+        "Consider getting multiple contractor quotes",
+        "Ensure compliance with local building codes",
+      ],
+      aiPrompts: [
+        `Modern ${bedrooms}-bedroom house in ${location}, realistic architecture, natural lighting`,
+        `Exterior view of affordable Kenyan home, practical layout, durable materials`,
+        `Interior of comfortable Kenyan house with natural materials, bright daylight`,
+      ],
+      recommendations: "Template-based recommendations tailored from your budget.",
+      costOptimization: "Use local materials, optimize spans to reduce steel, standardize window/door sizes.",
+      materials: "Stabilized soil blocks or concrete blocks, mabati roofing, UPVC windows, ceramic tiles",
+      _fallbackReason: '',
+    };
+  };
+
   try {
     const { budget, location = "Kenya", preferences = "" } = await req.json();
-    
+
+    if (!budget || typeof budget !== 'number' || budget <= 0) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid budget provided',
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // If no API key is configured, immediately return a high-quality fallback template
+    if (!openRouterApiKey) {
+      const plan = buildFallbackPlan(budget, location, preferences);
+      plan._fallbackReason = 'Missing OPENROUTER_API_KEY';
+      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log(`Generating house plan for budget: KES ${budget}`);
 
     const prompt = `You are an expert Kenyan architect and construction consultant. Generate a comprehensive house plan for a budget of KES ${budget.toLocaleString()} in ${location}.
@@ -62,110 +141,82 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
       headers: {
         'Authorization': `Bearer ${openRouterApiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://your-site.com',
-        'X-Title': 'House Plan Generator'
+        // Only X-Title is required; omit HTTP-Referer to avoid domain validation issues
+        'X-Title': 'House Plan Generator',
       },
       body: JSON.stringify({
         model: 'anthropic/claude-3.5-sonnet',
         messages: [
-          { 
-            role: 'system', 
-            content: 'You are an expert Kenyan architect who generates realistic, buildable house plans with accurate cost breakdowns based on current Kenyan construction costs.' 
-          },
+          { role: 'system', content: 'You are an expert Kenyan architect who generates realistic, buildable house plans with accurate cost breakdowns based on current Kenyan construction costs.' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 4000
+        max_tokens: 4000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`OpenRouter API error: ${response.status} - ${errorText}`);
-      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      const plan = buildFallbackPlan(budget, location, preferences);
+      plan._fallbackReason = `OpenRouter API error: ${response.status} - ${errorText}`;
+      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const data = await response.json();
-    const aiContent = data.choices[0].message.content;
-    
-    console.log('AI Response received:', aiContent.substring(0, 200) + '...');
-    
-    // Try to parse JSON, fallback to structured response if needed
-    let planData;
-    try {
-      // Extract JSON from response if wrapped in markdown
-      const jsonMatch = aiContent.match(/```json\n(.*?)\n```/s) || aiContent.match(/\{.*\}/s);
-      const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : aiContent;
-      planData = JSON.parse(jsonString);
-      
-      // Ensure we have an ID
-      planData.id = `ai-plan-${budget}-${Date.now()}`;
-      planData.budget = budget;
-      
-      console.log('Successfully parsed AI-generated plan');
-    } catch (parseError) {
-      console.error('JSON parsing failed, creating fallback plan:', parseError);
-      
-      // Create a structured fallback if JSON parsing fails
-      const bedrooms = budget < 1000000 ? 2 : budget < 3000000 ? 3 : budget < 8000000 ? 4 : 5;
-      const size = budget < 1000000 ? 50 : budget < 3000000 ? 100 : budget < 8000000 ? 150 : 250;
-      
-      planData = {
-        id: `ai-plan-${budget}-${Date.now()}`,
-        budget,
-        houseType: `${bedrooms}-Bedroom AI-Generated House`,
-        style: "Modern Kenyan",
-        bedrooms,
-        size,
-        plotSize: size * 4,
-        roofing: "Mabati (iron sheets)",
-        interiorFinish: "Ceramic tiles",
-        costBreakdown: {
-          land: Math.floor(budget * 0.25),
-          foundation: Math.floor(budget * 0.12),
-          walls: Math.floor(budget * 0.30),
-          roofing: Math.floor(budget * 0.15),
-          windows: Math.floor(budget * 0.08),
-          interior: Math.floor(budget * 0.20),
-          plumbing: Math.floor(budget * 0.10),
-          electrical: Math.floor(budget * 0.08),
-          labour: Math.floor(budget * 0.25),
-          permits: Math.floor(budget * 0.03),
-          furniture: Math.floor(budget * 0.10),
-          landscaping: Math.floor(budget * 0.05)
-        },
-        timeline: `${Math.ceil(size / 25)} months`,
-        notes: [
-          "💡 AI-generated plan based on your budget",
-          "📋 Consider getting multiple contractor quotes",
-          "🏛️ Ensure compliance with local building codes"
-        ],
-        aiPrompts: [
-          `Modern ${bedrooms}-bedroom house in Kenya, realistic architecture, natural lighting`,
-          `Exterior view of affordable Kenyan home, well-designed and practical`,
-          `Interior of comfortable Kenyan house with natural materials`
-        ],
-        recommendations: "AI-powered architectural recommendations",
-        costOptimization: "Smart cost-saving suggestions",
-        materials: "Climate-appropriate material recommendations"
-      };
+    const aiContent = data.choices?.[0]?.message?.content;
+
+    if (!aiContent || typeof aiContent !== 'string') {
+      console.error('Invalid AI response structure');
+      const plan = buildFallbackPlan(budget, location, preferences);
+      plan._fallbackReason = 'Invalid AI response structure';
+      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      plan: planData 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.log('AI Response received:', aiContent.substring(0, 200) + '...');
 
-  } catch (error) {
+    // Try to parse JSON, fallback to structured response if needed
+    let planData: any;
+    try {
+      // Extract JSON from response if wrapped in markdown
+      const jsonMatch = aiContent.match(/```json\n(.*?)\n```/s) || aiContent.match(/\{[\s\S]*\}/s);
+      const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent;
+      planData = JSON.parse(jsonString);
+
+      // Ensure we have an ID and budget fields
+      planData.id = `ai-plan-${budget}-${Date.now()}`;
+      planData.budget = budget;
+
+      return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'openrouter' } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (parseError) {
+      console.error('JSON parsing failed, returning fallback plan:', parseError);
+      const plan = buildFallbackPlan(budget, location, preferences);
+      plan._fallbackReason = 'AI returned non-JSON content';
+      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch (error: any) {
     console.error('Error in generate-house-plan function:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    // As a last resort, provide a fallback so the user still gets a plan and we surface the reason
+    try {
+      const { budget = 1_500_000, location = 'Kenya', preferences = '' } = await req.json().catch(() => ({}));
+      const plan = buildFallbackPlan(budget, location, preferences);
+      plan._fallbackReason = error?.message || 'Unknown error';
+      return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch {
+      return new Response(JSON.stringify({ success: false, error: error?.message || 'Unknown error' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
   }
 });
