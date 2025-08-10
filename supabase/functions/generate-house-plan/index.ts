@@ -1,7 +1,9 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { HfInference } from 'https://esm.sh/@huggingface/inference@2.3.2'
 
 const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+const hfToken = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,10 +88,31 @@ serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // If no API key is configured, immediately return a high-quality fallback template
+    // Prefer OpenRouter if available; otherwise fall back to Hugging Face LLM
     if (!openRouterApiKey) {
+      if (hfToken) {
+        try {
+          const hf = new HfInference(hfToken);
+          const hfRes: any = await hf.textGeneration({
+            model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+            inputs: prompt,
+            parameters: { max_new_tokens: 1200, temperature: 0.6 }
+          });
+          const aiContent = hfRes?.generated_text || '';
+          const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/s) || aiContent.match(/\{[\s\S]*\}/s);
+          const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent;
+          const planData = JSON.parse(jsonString);
+          planData.id = `ai-plan-${budget}-${Date.now()}`;
+          planData.budget = budget;
+          return new Response(JSON.stringify({ success: true, plan: planData, meta: { source: 'huggingface' } }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (e) {
+          console.error('Hugging Face generation failed:', e);
+        }
+      }
       const plan = buildFallbackPlan(budget, location, preferences);
-      plan._fallbackReason = 'Missing OPENROUTER_API_KEY';
+      plan._fallbackReason = 'Missing OPENROUTER_API_KEY and HF fallback failed or missing token';
       return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -158,6 +181,28 @@ Ensure all costs add up to approximately the given budget. Make recommendations 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      // Try Hugging Face LLM as secondary provider when OpenRouter fails (e.g., 402 insufficient credits)
+      if (hfToken) {
+        try {
+          const hf = new HfInference(hfToken);
+          const hfRes: any = await hf.textGeneration({
+            model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+            inputs: prompt,
+            parameters: { max_new_tokens: 1200, temperature: 0.6 }
+          });
+          const aiContentHF = hfRes?.generated_text || '';
+          const jsonMatchHF = aiContentHF.match(/```json\n([\s\S]*?)\n```/s) || aiContentHF.match(/\{[\s\S]*\}/s);
+          const jsonStringHF = jsonMatchHF ? (jsonMatchHF[1] || jsonMatchHF[0]) : aiContentHF;
+          const planDataHF = JSON.parse(jsonStringHF);
+          planDataHF.id = `ai-plan-${budget}-${Date.now()}`;
+          planDataHF.budget = budget;
+          return new Response(JSON.stringify({ success: true, plan: planDataHF, meta: { source: 'huggingface', reason: `OpenRouter failed: ${response.status}` } }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (hfErr) {
+          console.error('Hugging Face fallback failed:', hfErr);
+        }
+      }
       const plan = buildFallbackPlan(budget, location, preferences);
       plan._fallbackReason = `OpenRouter API error: ${response.status} - ${errorText}`;
       return new Response(JSON.stringify({ success: true, plan, meta: { source: 'fallback', reason: plan._fallbackReason } }), {

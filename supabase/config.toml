@@ -1,1 +1,13 @@
 project_id = "ixzuajbcoyrpgphvpvqd"
+
+[functions.generate-house-plan]
+verify_jwt = false
+
+[functions.enhance-plan-with-ai]
+verify_jwt = false
+
+[functions.generate-visuals]
+verify_jwt = false
+
+[functions.generate-prompt-variations]
+verify_jwt = false

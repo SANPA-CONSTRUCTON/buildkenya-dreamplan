@@ -6,11 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import AppLayout from "@/components/AppLayout";
 import { HousePlan } from "@/lib/planGenerator";
-import { Copy, RefreshCw, ArrowLeft, Home } from "lucide-react";
+import { Copy, RefreshCw, ArrowLeft, Home, Sparkles } from "lucide-react";
+import { useAIPromptVariations } from "@/hooks/useAIPromptVariations";
 import { toast } from "sonner";
 
 const Prompt = () => {
   const [plan, setPlan] = useState<HousePlan | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const { generatePromptVariations, isLoading, error } = useAIPromptVariations();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,12 +63,33 @@ const Prompt = () => {
               Back to Results
             </Button>
           </Link>
-          <div>
+          <div className="flex-1">
             <h1 className="text-4xl font-bold">AI Visual Prompts</h1>
-            <p className="text-muted-foreground">
-              Copy these prompts into DALL-E, Midjourney, or Stable Diffusion
-            </p>
+            <p className="text-muted-foreground">Copy these prompts into your favorite image model</p>
           </div>
+          <Button
+            onClick={async () => {
+              if (!plan) return;
+              setGenerating(true);
+              const prompts = await generatePromptVariations(plan);
+              setGenerating(false);
+              if (prompts) {
+                const updated = { ...plan, aiPrompts: prompts };
+                localStorage.setItem('currentPlan', JSON.stringify(updated));
+                setPlan(updated);
+                toast.success('AI-generated prompt variations ready!');
+              } else if (error) {
+                toast.error(error);
+              } else {
+                toast.error('Failed to generate prompts');
+              }
+            }}
+            variant="hero"
+            disabled={isLoading || generating}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            {isLoading || generating ? 'Generating…' : 'Generate AI Variations'}
+          </Button>
         </div>
 
         <div className="grid gap-6 max-w-4xl">
