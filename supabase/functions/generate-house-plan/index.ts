@@ -185,7 +185,8 @@ Respond with a JSON object containing:
   "costOptimization": "specific cost-saving suggestions",
   "materials": "recommended materials for local climate"
 }
-`;
+
+Important: Return strictly valid JSON only, with no code fences, markdown, or additional text.`;
 
 
     if (!googleApiKey) {
@@ -204,7 +205,7 @@ Respond with a JSON object containing:
         contents: [
           { role: 'user', parts: [{ text: prompt }] }
         ],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4000 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4000, response_mime_type: "application/json" }
       })
     });
 
