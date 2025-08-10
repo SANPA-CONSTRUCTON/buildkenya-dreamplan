@@ -8,6 +8,7 @@ import AppLayout from "@/components/AppLayout";
 import { HousePlan } from "@/lib/planGenerator";
 import { Copy, RefreshCw, ArrowLeft, Home, Sparkles } from "lucide-react";
 import { useAIPromptVariations } from "@/hooks/useAIPromptVariations";
+import { useAIGeneratedImages } from "@/hooks/useAIGeneratedImages";
 import { toast } from "sonner";
 
 const Prompt = () => {
@@ -15,6 +16,8 @@ const Prompt = () => {
   const [generating, setGenerating] = useState(false);
   const { generatePromptVariations, isLoading, error } = useAIPromptVariations();
   const [autoTriggered, setAutoTriggered] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
+  const { generateImages, isLoading: imagesLoading, error: imagesError } = useAIGeneratedImages();
 
   const navigate = useNavigate();
 
@@ -114,6 +117,28 @@ const Prompt = () => {
             <Sparkles className="w-4 h-4 mr-2" />
             {isLoading || generating ? 'Generating…' : 'Generate AI Variations'}
           </Button>
+          <Button
+            onClick={async () => {
+              if (!plan?.aiPrompts?.length) {
+                toast.error('No prompts to generate images');
+                return;
+              }
+              const imgs = await generateImages(plan.aiPrompts);
+              if (imgs && imgs.length) {
+                setImages(imgs);
+                toast.success(`Generated ${imgs.length} images`);
+              } else if (imagesError) {
+                toast.error(imagesError);
+              } else {
+                toast.error('Failed to generate images');
+              }
+            }}
+            variant="outline"
+            disabled={imagesLoading}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            {imagesLoading ? 'Generating Images…' : 'Generate Visuals'}
+          </Button>
         </div>
 
         <div className="grid gap-6 max-w-4xl">
@@ -154,6 +179,27 @@ const Prompt = () => {
               </CardContent>
             </Card>
           ))}
+
+          {images.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Generated Visuals</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {images.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt={`AI-generated house visual ${i + 1} ${plan.location ? 'in ' + plan.location : ''}`}
+                      loading="lazy"
+                      className="rounded-lg w-full h-auto"
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

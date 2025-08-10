@@ -31,17 +31,22 @@ serve(async (req) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [
-              { role: 'user', parts: [{ text: `${system}\n\n${user}\n\nReturn only a JSON array of 3 strings.` }] }
+              { role: 'user', parts: [{ text: `${system}\n\n${user}\n\nImportant: Return strictly a JSON array of 3 strings. No markdown, no extra text.` }] }
             ],
-            generationConfig: { temperature: 0.6, maxOutputTokens: 800 }
+            generationConfig: { temperature: 0.5, maxOutputTokens: 512, response_mime_type: 'application/json' }
           })
         });
 
         if (gr.ok) {
           const gdata = await gr.json();
           const text = gdata?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || gdata?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          const matchG = text?.match(/\[[\s\S]*\]/s);
-          const promptsG: string[] = matchG ? JSON.parse(matchG[0]) : [];
+          let promptsG: string[] = [];
+          try {
+            promptsG = JSON.parse(text);
+          } catch {
+            const matchG = text?.match(/\[[\s\S]*\]/s);
+            promptsG = matchG ? JSON.parse(matchG[0]) : [];
+          }
           if (Array.isArray(promptsG) && promptsG.length) {
             return new Response(JSON.stringify({ success: true, prompts: promptsG.slice(0, 3), meta: { source: 'google' } }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
