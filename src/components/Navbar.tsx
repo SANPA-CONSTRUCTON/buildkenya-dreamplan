@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Home, Target, Image, CheckSquare, Info } from "lucide-react";
+import { Home, Target, Image, CheckSquare, Info, Bookmark } from "lucide-react";
+import { AuthButton } from "./AuthButton";
 
 const Navbar = () => {
   const location = useLocation();
@@ -10,6 +11,7 @@ const Navbar = () => {
     { path: "/results", label: "Results", icon: Target },
     { path: "/prompt", label: "AI Prompt", icon: Image },
     { path: "/journey", label: "Journey", icon: CheckSquare },
+    { path: "/saved-plans", label: "My Plans", icon: Bookmark },
     { path: "/about", label: "About", icon: Info },
   ];
 
@@ -48,6 +50,10 @@ const Navbar = () => {
                 </Button>
               </Link>
             ))}
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <AuthButton />
           </div>
         </div>
       </div>

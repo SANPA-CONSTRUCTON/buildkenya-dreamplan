@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import AppLayout from "@/components/AppLayout";
+import { usePlanningProgress } from "@/hooks/usePlanningProgress";
 import { CheckCircle, Clock, DollarSign, FileText, AlertTriangle } from "lucide-react";
 
 interface JourneyStep {
@@ -19,6 +21,9 @@ interface JourneyStep {
 }
 
 const Journey = () => {
+  const [searchParams] = useSearchParams();
+  const planId = searchParams.get('planId');
+  const { saveProgress, getProgress, loading } = usePlanningProgress();
   const [steps, setSteps] = useState<JourneyStep[]>([
     {
       id: "land",
@@ -193,10 +198,41 @@ const Journey = () => {
     }
   ]);
 
-  const toggleStep = (stepId: string) => {
-    setSteps(prev => prev.map(step => 
-      step.id === stepId ? { ...step, completed: !step.completed } : step
+  useEffect(() => {
+    if (planId) {
+      loadProgress();
+    }
+  }, [planId]);
+
+  const loadProgress = async () => {
+    if (!planId) return;
+    
+    const progressData = await getProgress(planId);
+    const completedStepsMap: { [key: string]: boolean } = {};
+    
+    progressData.forEach((progress) => {
+      completedStepsMap[progress.step_id] = progress.completed;
+    });
+    
+    setSteps(prev => prev.map(step => ({
+      ...step,
+      completed: completedStepsMap[step.id] || false
+    })));
+  };
+
+  const toggleStep = async (stepId: string) => {
+    const step = steps.find(s => s.id === stepId);
+    if (!step) return;
+
+    const newCompletedState = !step.completed;
+    
+    setSteps(prev => prev.map(s => 
+      s.id === stepId ? { ...s, completed: newCompletedState } : s
     ));
+
+    if (planId) {
+      await saveProgress(planId, stepId, step.title, newCompletedState);
+    }
   };
 
   const completedSteps = steps.filter(step => step.completed).length;

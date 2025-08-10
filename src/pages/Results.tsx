@@ -6,13 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import AppLayout from "@/components/AppLayout";
 import { HousePlan, generateHousePlan } from "@/lib/planGenerator";
-import { RefreshCw, ArrowRight, Home } from "lucide-react";
+import { useHousePlans } from "@/hooks/useHousePlans";
+import { RefreshCw, ArrowRight, Home, Save } from "lucide-react";
 import { toast } from "sonner";
 
 const Results = () => {
   const [plan, setPlan] = useState<HousePlan | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const navigate = useNavigate();
+  const { savePlan, loading: saveLoading } = useHousePlans();
 
   useEffect(() => {
     const storedPlan = localStorage.getItem("currentPlan");
@@ -40,6 +42,15 @@ const Results = () => {
       toast.error("Failed to regenerate plan. Please try again.");
     } finally {
       setIsRegenerating(false);
+    }
+  };
+
+  const handleSavePlan = async () => {
+    if (plan) {
+      const savedPlan = await savePlan(plan);
+      if (savedPlan) {
+        toast.success("Plan saved! You can now track your progress in the Journey section.");
+      }
     }
   };
 
@@ -85,6 +96,14 @@ const Results = () => {
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isRegenerating ? 'animate-spin' : ''}`} />
               {isRegenerating ? 'Regenerating...' : 'Reroll Design'}
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={handleSavePlan}
+              disabled={saveLoading}
+            >
+              <Save className={`w-4 h-4 mr-2`} />
+              {saveLoading ? 'Saving...' : 'Save Plan'}
             </Button>
             <Link to="/prompt">
               <Button variant="hero">

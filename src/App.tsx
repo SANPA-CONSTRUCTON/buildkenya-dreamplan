@@ -8,6 +8,7 @@ import Results from "./pages/Results";
 import Prompt from "./pages/Prompt";
 import Journey from "./pages/Journey";
 import About from "./pages/About";
+import { SavedPlans } from "./pages/SavedPlans";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/results" element={<Results />} />
           <Route path="/prompt" element={<Prompt />} />
           <Route path="/journey" element={<Journey />} />
+          <Route path="/saved-plans" element={<SavedPlans />} />
           <Route path="/about" element={<About />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
