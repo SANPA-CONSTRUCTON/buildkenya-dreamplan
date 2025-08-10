@@ -12,6 +12,7 @@ import { RefreshCw, ArrowRight, Home, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAIGeneratedImages } from "@/hooks/useAIGeneratedImages";
 
 const Results = () => {
   const [plan, setPlan] = useState<HousePlan | null>(null);
@@ -19,6 +20,8 @@ const Results = () => {
   const navigate = useNavigate();
   const { savePlan, loading: saveLoading } = useHousePlans();
   const { enhancePlanWithAI, isLoading: aiLoading, error: aiError } = useAIEnhancement();
+  const { generateImages, isLoading: imagesLoading, error: imagesError } = useAIGeneratedImages();
+  const [images, setImages] = useState<string[]>([]);
 
   // Optional add-ons (user-selectable upgrades)
   const addonOptions = [
@@ -102,6 +105,25 @@ const Results = () => {
       toast.error("Could not enhance the plan with AI. Please try again.");
     }
   };
+
+  const handleGenerateVisuals = async () => {
+    if (!plan) return;
+    const prompts = (plan as any).aiPrompts?.length
+      ? (plan as any).aiPrompts.slice(0, 3)
+      : [
+          `Exterior of a ${plan.bedrooms}-bedroom ${plan.style} house in Kenya, realistic materials, natural lighting, landscaping, detailed textures` ,
+          `Interior living room of a ${plan.bedrooms}-bedroom Kenyan home, modern yet practical finishes, natural light, furniture layout`,
+          `Aerial view of plot with ${plan.size}m² house on ${plan.plotSize}m² plot, driveway and garden layout`
+        ];
+    const result = await generateImages(prompts);
+    if (result) {
+      setImages(result);
+      toast.success('AI visuals generated!');
+    } else {
+      toast.error('Failed to generate visuals');
+    }
+  };
+
 
   if (!plan) {
     return (
@@ -269,16 +291,35 @@ const Results = () => {
             
             <Card>
               <CardHeader>
-                <CardTitle>💡 Expert Tips</CardTitle>
+                <CardTitle>AI Visuals</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {plan.notes.map((note, index) => (
-                    <p key={index} className="text-sm bg-muted/50 p-3 rounded-lg">
-                      {note}
-                    </p>
-                  ))}
+              <CardContent className="space-y-4">
+                {imagesError && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Image generation failed</AlertTitle>
+                    <AlertDescription>{imagesError}</AlertDescription>
+                  </Alert>
+                )}
+                <div className="flex gap-2">
+                  <Button onClick={handleGenerateVisuals} disabled={imagesLoading} variant="default">
+                    {imagesLoading ? 'Generating...' : (images.length ? 'Regenerate Visuals' : 'Generate Visuals')}
+                  </Button>
+                  <Link to="/prompt">
+                    <Button variant="outline">
+                      Open Prompt Builder
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </Link>
                 </div>
+                {images.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {images.map((src, idx) => (
+                      <figure key={idx} className="rounded-lg overflow-hidden border">
+                        <img src={src} alt={`AI visual ${idx + 1} of ${plan.houseType}`} loading="lazy" className="w-full h-auto" />
+                      </figure>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
