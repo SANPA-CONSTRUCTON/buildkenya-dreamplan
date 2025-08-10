@@ -1,5 +1,13 @@
 import { SeededRandom, createSeededRandom } from "./random";
 
+export interface AIEnhancedData {
+  recommendations: string;
+  costOptimization: string;
+  materials: string;
+  timeline: string;
+  aiPrompts: string[];
+}
+
 export interface HousePlan {
   id: string;
   budget: number;
@@ -27,6 +35,7 @@ export interface HousePlan {
   timeline: string;
   notes: string[];
   aiPrompts: string[];
+  aiEnhanced?: AIEnhancedData;
 }
 
 const ARCHITECTURAL_STYLES = [

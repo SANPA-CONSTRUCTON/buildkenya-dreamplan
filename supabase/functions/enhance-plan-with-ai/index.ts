@@ -1,0 +1,107 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { budget, location = "Kenya", preferences = "" } = await req.json();
+
+    const prompt = `You are an expert architect and construction consultant specializing in Kenyan housing development. Generate enhanced house plan recommendations for a budget of KES ${budget.toLocaleString()}.
+
+Location: ${location}
+Additional preferences: ${preferences}
+
+Please provide:
+1. Detailed architectural recommendations with specific Kenyan considerations
+2. Cost optimization suggestions
+3. Material recommendations suitable for Kenyan climate
+4. Timeline insights
+5. 3 highly detailed visual prompts for AI image generation that capture the essence of the recommended house design
+
+Focus on practical, buildable solutions that maximize value within the budget while considering local building codes, climate, and available materials in Kenya.
+
+Respond in JSON format with these fields:
+{
+  "recommendations": "detailed architectural advice",
+  "costOptimization": "specific cost-saving suggestions",
+  "materials": "recommended materials for Kenyan climate",
+  "timeline": "construction timeline insights",
+  "aiPrompts": ["prompt1", "prompt2", "prompt3"]
+}`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterApiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://your-site.com',
+        'X-Title': 'House Plan Generator'
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are an expert architect and construction consultant specializing in affordable housing solutions in Kenya. Provide practical, detailed advice.' 
+          },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const aiContent = data.choices[0].message.content;
+    
+    // Try to parse JSON, fallback to structured text if needed
+    let enhancedData;
+    try {
+      enhancedData = JSON.parse(aiContent);
+    } catch {
+      // If JSON parsing fails, create structured response
+      enhancedData = {
+        recommendations: aiContent.substring(0, 500),
+        costOptimization: "AI-generated cost optimization suggestions",
+        materials: "AI-recommended materials for Kenyan climate",
+        timeline: "AI-enhanced timeline insights",
+        aiPrompts: [
+          "A modern Kenyan house with traditional touches, realistic architecture",
+          "Exterior view of an affordable house in Kenya, well-designed and practical",
+          "Interior of a comfortable Kenyan home, natural lighting and local materials"
+        ]
+      };
+    }
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      enhancedData 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error('Error in enhance-plan-with-ai function:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: error.message 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});

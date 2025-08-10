@@ -7,7 +7,8 @@ import { Separator } from "@/components/ui/separator";
 import AppLayout from "@/components/AppLayout";
 import { HousePlan, generateHousePlan } from "@/lib/planGenerator";
 import { useHousePlans } from "@/hooks/useHousePlans";
-import { RefreshCw, ArrowRight, Home, Save } from "lucide-react";
+import { useAIEnhancement } from "@/hooks/useAIEnhancement";
+import { RefreshCw, ArrowRight, Home, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 const Results = () => {
@@ -15,6 +16,7 @@ const Results = () => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const navigate = useNavigate();
   const { savePlan, loading: saveLoading } = useHousePlans();
+  const { enhancePlanWithAI, isLoading: aiLoading, error: aiError } = useAIEnhancement();
 
   useEffect(() => {
     const storedPlan = localStorage.getItem("currentPlan");
@@ -51,6 +53,23 @@ const Results = () => {
       if (savedPlan) {
         toast.success("Plan saved! You can now track your progress in the Journey section.");
       }
+    }
+  };
+
+  const handleEnhanceWithAI = async () => {
+    if (!plan) return;
+    
+    try {
+      const enhancedData = await enhancePlanWithAI(plan.budget, "Kenya", "");
+      if (enhancedData) {
+        const enhancedPlan = { ...plan, aiEnhanced: enhancedData };
+        setPlan(enhancedPlan);
+        localStorage.setItem('currentPlan', JSON.stringify(enhancedPlan));
+        
+        toast.success("Plan enhanced with AI insights!");
+      }
+    } catch (error) {
+      toast.error("Could not enhance the plan with AI. Please try again.");
     }
   };
 
@@ -104,6 +123,14 @@ const Results = () => {
             >
               <Save className={`w-4 h-4 mr-2`} />
               {saveLoading ? 'Saving...' : 'Save Plan'}
+            </Button>
+            <Button 
+              onClick={handleEnhanceWithAI} 
+              variant="outline" 
+              disabled={aiLoading}
+            >
+              <Sparkles className={`w-4 h-4 mr-2 ${aiLoading ? 'animate-pulse' : ''}`} />
+              {aiLoading ? 'Enhancing...' : 'AI Enhance'}
             </Button>
             <Link to="/prompt">
               <Button variant="hero">
@@ -168,6 +195,37 @@ const Results = () => {
           </div>
 
           <div className="space-y-6">
+            {plan.aiEnhanced && (
+              <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                    AI-Enhanced Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Architectural Recommendations</h4>
+                    <p className="text-sm text-muted-foreground bg-background/50 p-3 rounded-lg">
+                      {plan.aiEnhanced.recommendations}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Cost Optimization</h4>
+                    <p className="text-sm text-muted-foreground bg-background/50 p-3 rounded-lg">
+                      {plan.aiEnhanced.costOptimization}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Materials & Climate</h4>
+                    <p className="text-sm text-muted-foreground bg-background/50 p-3 rounded-lg">
+                      {plan.aiEnhanced.materials}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             <Card>
               <CardHeader>
                 <CardTitle>💡 Expert Tips</CardTitle>
