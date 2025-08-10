@@ -14,7 +14,146 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      house_plans: {
+        Row: {
+          ai_prompts: string[]
+          bedrooms: number
+          budget: number
+          cost_breakdown: Json
+          created_at: string
+          house_type: string
+          id: string
+          interior_finish: string
+          notes: string[]
+          plot_size: number
+          roofing: string
+          size: number
+          style: string
+          timeline: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ai_prompts?: string[]
+          bedrooms: number
+          budget: number
+          cost_breakdown: Json
+          created_at?: string
+          house_type: string
+          id?: string
+          interior_finish: string
+          notes?: string[]
+          plot_size: number
+          roofing: string
+          size: number
+          style: string
+          timeline: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ai_prompts?: string[]
+          bedrooms?: number
+          budget?: number
+          cost_breakdown?: Json
+          created_at?: string
+          house_type?: string
+          id?: string
+          interior_finish?: string
+          notes?: string[]
+          plot_size?: number
+          roofing?: string
+          size?: number
+          style?: string
+          timeline?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      planning_progress: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          plan_id: string | null
+          step_id: string
+          step_name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_id?: string | null
+          step_id: string
+          step_name: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          plan_id?: string | null
+          step_id?: string
+          step_name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_progress_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "house_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          budget_range_max: number | null
+          budget_range_min: number | null
+          created_at: string
+          id: string
+          notifications_enabled: boolean | null
+          preferred_locations: string[] | null
+          preferred_styles: string[] | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          budget_range_max?: number | null
+          budget_range_min?: number | null
+          created_at?: string
+          id?: string
+          notifications_enabled?: boolean | null
+          preferred_locations?: string[] | null
+          preferred_styles?: string[] | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          budget_range_max?: number | null
+          budget_range_min?: number | null
+          created_at?: string
+          id?: string
+          notifications_enabled?: boolean | null
+          preferred_locations?: string[] | null
+          preferred_styles?: string[] | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
