@@ -71,13 +71,18 @@ const Prompt = () => {
             onClick={async () => {
               if (!plan) return;
               setGenerating(true);
-              const prompts = await generatePromptVariations(plan);
+              const res = await generatePromptVariations(plan);
               setGenerating(false);
-              if (prompts) {
-                const updated = { ...plan, aiPrompts: prompts };
+              if (res?.prompts) {
+                const updated = { ...plan, aiPrompts: res.prompts };
                 localStorage.setItem('currentPlan', JSON.stringify(updated));
                 setPlan(updated);
-                toast.success('AI-generated prompt variations ready!');
+                const src = res.meta?.source || 'unknown';
+                if (src !== 'openrouter') {
+                  toast.info(`Using ${src} for prompts`);
+                } else {
+                  toast.success('OpenRouter AI used for prompt variations');
+                }
               } else if (error) {
                 toast.error(error);
               } else {

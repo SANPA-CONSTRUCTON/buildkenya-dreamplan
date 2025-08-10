@@ -6,7 +6,7 @@ export const useAIPromptVariations = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generatePromptVariations = async (plan: HousePlan): Promise<string[] | null> => {
+  const generatePromptVariations = async (plan: HousePlan): Promise<{ prompts: string[]; meta?: any } | null> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -24,7 +24,7 @@ export const useAIPromptVariations = () => {
       });
       if (fnError) throw fnError;
       if (!data?.success) throw new Error(data?.error || 'Failed to generate prompt variations');
-      return data.prompts as string[];
+      return { prompts: data.prompts as string[], meta: data.meta };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate prompt variations';
       setError(message);
